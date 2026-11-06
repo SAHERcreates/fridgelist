@@ -7,11 +7,7 @@ on:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [macos-latest, macos-15-intel, macos-14, macos-13]
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-15-intel
 
     steps:
       - name: Checkout
@@ -21,7 +17,6 @@ jobs:
         run: xcodebuild -version
 
       - name: Build unsigned app (device)
-        working-directory: FridgeList
         run: |
           xcodebuild \
             -project FridgeList.xcodeproj \
@@ -33,7 +28,6 @@ jobs:
             build
 
       - name: Package IPA
-        working-directory: FridgeList
         run: |
           mkdir -p Payload
           cp -r "build/Build/Products/Release-iphoneos/FridgeList.app" Payload/
@@ -42,6 +36,6 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: FridgeList-ipa-${{ matrix.runner }}
-          path: FridgeList/FridgeList.ipa
+          name: FridgeList-ipa
+          path: FridgeList.ipa
           retention-days: 30
