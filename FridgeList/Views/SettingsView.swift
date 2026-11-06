@@ -16,7 +16,7 @@ struct SettingsView: View {
                     Text("В демо-режиме вместо реального распознавания возвращается пример списка продуктов — удобно проверить приложение.")
                 }
 
-                Section("ИИ-сервис") {
+                Section {
                     SecureField("API-ключ", text: $settings.apiKey)
                         .textContentType(.password)
                         .autocorrectionDisabled()
@@ -33,15 +33,19 @@ struct SettingsView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .accessibilityIdentifier("settings.modelField")
+                } header: {
+                    Text("ИИ-сервис")
                 } footer: {
                     Text("Подойдёт любой OpenAI-совместимый сервис с зрительной моделью: OpenAI, OpenRouter и др. По умолчанию — api.openai.com, модель gpt-4o-mini. Ключ хранится в Keychain устройства.")
                 }
                 .disabled(settings.useMockService)
 
-                Section("Как это работает") {
+                Section {
                     Label("Сфотографируйте содержимое холодильника.", systemImage: "camera")
                     Label("Приложение распознает продукты на фото.", systemImage: "sparkle.magnifyingglass")
                     Label("Сравнит их с вашим списком покупок и покажет, что ещё нужно купить.", systemImage: "cart")
+                } header: {
+                    Text("Как это работает")
                 }
                 .foregroundStyle(.secondary)
             }
