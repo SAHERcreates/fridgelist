@@ -5,7 +5,7 @@ enum VisionError: LocalizedError {
     case missingAPIKey
     case invalidBaseURL
     case httpError(status: Int, message: String)
-    case unexpectedResponse
+    case unexpectedResponse(detail: String)
 
     var errorDescription: String? {
         switch self {
@@ -15,8 +15,8 @@ enum VisionError: LocalizedError {
             return "Некорректный адрес сервиса в настройках."
         case .httpError(let status, let message):
             return "Сервис вернул ошибку \(status): \(message)"
-        case .unexpectedResponse:
-            return "Не удалось разобрать ответ сервиса. Попробуйте ещё раз."
+        case .unexpectedResponse(let detail):
+            return "Не удалось разобрать ответ сервиса. Ответ: \(detail)"
         }
     }
 }
@@ -72,7 +72,9 @@ struct OpenAIVisionService: VisionService {
         request.httpBody = try JSONEncoder().encode(requestBody)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw VisionError.unexpectedResponse }
+        guard let http = response as? HTTPURLResponse else {
+            throw VisionError.unexpectedResponse(detail: "нет HTTP-ответа")
+        }
         guard (200..<300).contains(http.statusCode) else {
             let message = (try? JSONDecoder().decode(APIErrorEnvelope.self, from: data))?.error.message
                 ?? String(data: data.prefix(300), encoding: .utf8)
@@ -80,11 +82,18 @@ struct OpenAIVisionService: VisionService {
             throw VisionError.httpError(status: http.statusCode, message: message)
         }
 
-        let decoded = try JSONDecoder().decode(ChatResponse.self, from: data)
-        guard let content = decoded.choices.first?.message.content else {
-            throw VisionError.unexpectedResponse
+        let decoded: ChatResponse
+        do {
+            decoded = try JSONDecoder().decode(ChatResponse.self, from: data)
+        } catch {
+            let snippet = String(data: data.prefix(300), encoding: .utf8) ?? "нечитаемый ответ"
+            throw VisionError.unexpectedResponse(detail: snippet)
         }
-        return Self.parseProducts(from: content)
+        guard let rawContent = decoded.choices.first?.message.content else {
+            let snippet = String(data: data.prefix(300), encoding: .utf8) ?? "нечитаемый ответ"
+            throw VisionError.unexpectedResponse(detail: snippet)
+        }
+        return Self.parseProducts(from: rawContent.stringValue)
     }
 
     /// Достаёт массив продуктов из ответа модели, даже если тот обёрнут в ```json.
@@ -151,7 +160,37 @@ private struct ChatRequest: Encodable {
 
 private struct ChatResponse: Decodable {
     struct Choice: Decodable {
-        struct Message: Decodable { let content: String }
+        struct Message: Decodable {
+            /// Поле content может быть строкой, массивом частей или null.
+            let content: Content?
+
+            enum Content: Decodable {
+                struct Part: Decodable {
+                    let type: String?
+                    let text: String?
+                }
+                case text(String)
+                case parts([Part])
+
+                var stringValue: String {
+                    switch self {
+                    case .text(let s): return s
+                    case .parts(let parts): return parts.compactMap(\.text).joined()
+                    }
+                }
+
+                init(from decoder: Decoder) throws {
+                    let container = try decoder.singleValueContainer()
+                    if let s = try? container.decode(String.self) {
+                        self = .text(s)
+                    } else if let p = try? container.decode([Part].self) {
+                        self = .parts(p)
+                    } else {
+                        self = .text("")
+                    }
+                }
+            }
+        }
         let message: Message
     }
     let choices: [Choice]
